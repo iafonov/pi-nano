@@ -11,7 +11,6 @@ import argparse
 import json
 import re
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
@@ -305,7 +304,9 @@ def run_tool(name: str, arguments: dict[str, Any]) -> str:
         if name == "write":
             return write_tool(arguments["path"], arguments["content"])
         if name == "edit":
-            return edit_tool(arguments["path"], arguments["old_text"], arguments["new_text"])
+            return edit_tool(
+                arguments["path"], arguments["old_text"], arguments["new_text"]
+            )
         if name == "bash":
             return bash_tool(arguments["command"])
         if name == "internet":
@@ -345,7 +346,9 @@ def ollama_message(message: Message) -> Message:
     return formatted
 
 
-def call_llm(messages: list[Message], trajectory_path: Path, debug: bool) -> LLMResponse:
+def call_llm(
+    messages: list[Message], trajectory_path: Path, debug: bool
+) -> LLMResponse:
     """Call the local Ollama chat API."""
     if debug:
         print(f"{GRAY}--- LLM input ---")
@@ -379,23 +382,29 @@ def call_llm(messages: list[Message], trajectory_path: Path, debug: bool) -> LLM
         with urllib.request.urlopen(request, timeout=120) as response:
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.URLError as exc:
-        write_trajectory(trajectory_path, {
-            "type": "llm_call",
-            "payload": payload,
-            "error": str(exc),
-            "duration_seconds": round(time.time() - started_at, 3),
-        })
+        write_trajectory(
+            trajectory_path,
+            {
+                "type": "llm_call",
+                "payload": payload,
+                "error": str(exc),
+                "duration_seconds": round(time.time() - started_at, 3),
+            },
+        )
         return LLMResponse(text=f"Ollama error: {exc}", tool_calls=[])
     finally:
         stop_dots.set()
         dots_thread.join(timeout=1)
 
-    write_trajectory(trajectory_path, {
-        "type": "llm_call",
-        "payload": payload,
-        "response": data,
-        "duration_seconds": round(time.time() - started_at, 3),
-    })
+    write_trajectory(
+        trajectory_path,
+        {
+            "type": "llm_call",
+            "payload": payload,
+            "response": data,
+            "duration_seconds": round(time.time() - started_at, 3),
+        },
+    )
 
     message = data.get("message", {})
     content = message.get("content", "")
@@ -481,13 +490,15 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
         if not response.tool_calls:
             if not nudge_used and looks_like_pending_tool_action(response.text):
                 nudge_used = True
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "You said you would perform an action, but you did not call a tool. "
-                        "Call the appropriate tool now, or explain why no tool is needed."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You said you would perform an action, but you did not call a tool. "
+                            "Call the appropriate tool now, or explain why no tool is needed."
+                        ),
+                    }
+                )
                 continue
             return
 
@@ -502,11 +513,13 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                         input("Press Enter to run, or Ctrl+C to cancel...")
                     except KeyboardInterrupt:
                         print("\nBash command cancelled.")
-                        messages.append({
-                            "role": "tool",
-                            "name": call.name,
-                            "content": "Tool cancelled by user.",
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "name": call.name,
+                                "content": "Tool cancelled by user.",
+                            }
+                        )
                         return
             elif call.name == "edit":
                 print(
@@ -518,24 +531,30 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                 path = Path(call.arguments.get("path", ""))
                 size = path.stat().st_size if path.exists() else 0
                 tokens = int(size / 3.5)
-                print(f"{tool_label('read')} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
+                print(
+                    f"{tool_label('read')} {path.resolve()} ({size} bytes, ~{tokens} tokens)"
+                )
             elif call.name == "write":
                 path = Path(call.arguments.get("path", ""))
                 content = call.arguments.get("content", "")
                 size = len(content.encode("utf-8"))
                 tokens = int(size / 3.5)
-                print(f"{tool_label('write')} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
+                print(
+                    f"{tool_label('write')} {path.resolve()} ({size} bytes, ~{tokens} tokens)"
+                )
                 print(indent_text(content))
             elif call.name == "internet":
                 print(f"{tool_label('internet')} {call.arguments.get('url', '')}")
             else:
                 print(f"{tool_label(call.name)} {json.dumps(call.arguments)}")
             output = run_tool(call.name, call.arguments)
-            messages.append({
-                "role": "tool",
-                "name": call.name,
-                "content": output,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "name": call.name,
+                    "content": output,
+                }
+            )
             if call.name == "bash":
                 print(f"{tool_label('bash')}\n{indent_text(output)}")
             elif call.name == "internet" and not debug:
@@ -546,7 +565,9 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tiny local coding agent")
-    parser.add_argument("--debug", type=int, default=0, help="Show full LLM inputs when set to 1")
+    parser.add_argument(
+        "--debug", type=int, default=0, help="Show full LLM inputs when set to 1"
+    )
     args = parser.parse_args()
     debug = bool(args.debug)
 
@@ -554,6 +575,7 @@ def main() -> None:
     try:
         import urllib.request
         import json
+
         request = urllib.request.Request(
             "http://localhost:11434/api/tags",
             method="GET",
@@ -610,10 +632,12 @@ def main() -> None:
                 available = ", ".join(str(value) for value in sorted(turn_snapshots))
                 print(f"Unknown turn {target_turn}. Available turns: {available}")
                 continue
-            messages = messages[:turn_snapshots[target_turn]]
+            messages = messages[: turn_snapshots[target_turn]]
             turn = target_turn
             turn_snapshots = {
-                key: value for key, value in turn_snapshots.items() if key <= target_turn
+                key: value
+                for key, value in turn_snapshots.items()
+                if key <= target_turn
             }
             print(f"Rewound to turn {turn}.")
             continue

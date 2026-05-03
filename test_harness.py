@@ -9,7 +9,6 @@ observable results.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 import shutil
@@ -51,7 +50,7 @@ def log(message: str) -> None:
 
 def run_agent(workdir: Path) -> str:
     prompt_lines = [
-        "Create hello_world.py. You must use the write tool. The file content must be exactly: print(\"hello world\")",
+        'Create hello_world.py. You must use the write tool. The file content must be exactly: print("hello world")',
         "Run hello_world.py. You must use the bash tool to run exactly: python3 hello_world.py",
         "Edit hello_world.py. You must use the edit tool. Replace exactly hello world with hello worrrrlllldd.",
         "Run hello_world.py again. You must use the bash tool to run exactly: python3 hello_world.py",
@@ -196,13 +195,19 @@ def main() -> None:
         log("checking captured output markers")
         assert_contains(output, "[tool:write]", "write tool output")
         assert_contains(output, "[tool:edit]", "edit tool output")
-        assert_contains(output, "[tool:bash] $ python3 hello_world.py", "python bash command")
+        assert_contains(
+            output, "[tool:bash] $ python3 hello_world.py", "python bash command"
+        )
         assert_contains(output, "hello world", "initial hello-world output")
         assert_contains(output, "hello worrrrlllldd", "edited hello-world output")
         assert_contains(output, "[tool:bash] $ hostname", "hostname bash command")
         assert_contains(output, expected_hostname, "hostname output")
-        assert_contains(output, "[tool:internet] https://example.com", "internet tool call")
-        assert_contains(output, "Saved to: /tmp/pi_nano_example.com_", "internet saved-path output")
+        assert_contains(
+            output, "[tool:internet] https://example.com", "internet tool call"
+        )
+        assert_contains(
+            output, "Saved to: /tmp/pi_nano_example.com_", "internet saved-path output"
+        )
         assert_contains(output, "Rewound to turn 3.", "rewind confirmation")
         assert_contains(output, "[tool:bash] $ pwd", "pwd bash command after rewind")
 
