@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 BASE_SYSTEM_PROMPT = """You are a coding agent running locally in a terminal.
@@ -30,6 +31,7 @@ Available tools:
 - write: write a file
 - edit: replace exact text in a file
 - bash: run a shell command
+- internet: fetch URL contents
 
 Guidelines:
 - Inspect files before editing them.
@@ -40,6 +42,8 @@ Guidelines:
 - Ask before destructive actions.
 - If you need to inspect, create, edit, or run anything, call a tool.
 - Do not say "I'll read/edit/run/fix" unless you call the appropriate tool in the same response.
+- Tool results are raw data for completing the user's task; do not summarize them unless asked.
+- After a tool result, continue the user's original task.
 """
 
 
@@ -60,6 +64,7 @@ Message = dict[str, Any]
 GRAY = "\033[2;90m"
 PUNK = "\033[1;35m"
 TOOL = "\033[1;97;45m"
+BOLD = "\033[1m"
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 RESET = "\033[0m"
@@ -117,6 +122,18 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
                 "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "internet",
+            "description": "Fetch URL contents from the internet, save them to /tmp, and return the saved path.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
             },
         },
     },
@@ -237,6 +254,35 @@ def should_auto_accept_bash(command: str) -> bool:
     )
 
 
+def internet_tool(url: str) -> str:
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("url must start with http:// or https://")
+
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "pi-nano/0.1"},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        raw = response.read(2_000_000)
+        charset = response.headers.get_content_charset() or "utf-8"
+        body = raw.decode(charset, errors="replace")
+        parsed = urlparse(url)
+        suffix = Path(parsed.path).suffix or ".html"
+        safe_host = re.sub(r"[^a-zA-Z0-9_.-]+", "_", parsed.netloc) or "fetch"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = Path("/tmp") / f"pi_nano_{safe_host}_{timestamp}{suffix}"
+        output_path.write_text(body, encoding="utf-8")
+        return (
+            f"Fetched {url}\n"
+            f"Status: {response.status}\n"
+            f"Content-Type: {response.headers.get('content-type', '')}\n"
+            f"Saved to: {output_path}\n"
+            f"Size: {len(body.encode('utf-8'))} bytes\n"
+            f"Read it with the read tool if needed, or process it with bash."
+        )
+
+
 def bash_tool(command: str) -> str:
     result = subprocess.run(
         command,
@@ -258,6 +304,8 @@ def run_tool(name: str, arguments: dict[str, Any]) -> str:
             return edit_tool(arguments["path"], arguments["old_text"], arguments["new_text"])
         if name == "bash":
             return bash_tool(arguments["command"])
+        if name == "internet":
+            return internet_tool(arguments["url"])
         raise ValueError(f"Unknown tool: {name}")
     except Exception as exc:
         return f"Tool error: {exc}"
@@ -385,8 +433,20 @@ def looks_like_pending_tool_action(text: str) -> bool:
         "i'll run",
         "i will run",
         "let me run",
+        "i'll fetch",
+        "i will fetch",
+        "let me fetch",
+        "i'll open",
+        "let me open",
     )
     return any(phrase in lowered for phrase in action_phrases)
+
+
+def format_llm_output(text: str) -> str:
+    parts = text.split("```")
+    for index in range(1, len(parts), 2):
+        parts[index] = f"{BOLD}{parts[index]}{RESET}"
+    return "```".join(parts)
 
 
 def tool_label(name: str) -> str:
@@ -411,7 +471,7 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
         messages.append(assistant_message)
 
         if response.text:
-            print(response.text)
+            print(format_llm_output(response.text))
 
         if not response.tool_calls:
             if not nudge_used and looks_like_pending_tool_action(response.text):
@@ -461,6 +521,8 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                 tokens = int(size / 3.5)
                 print(f"{tool_label('write')} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
                 print(indent_text(content))
+            elif call.name == "internet":
+                print(f"{tool_label('internet')} {call.arguments.get('url', '')}")
             else:
                 print(f"{tool_label(call.name)} {json.dumps(call.arguments)}")
             output = run_tool(call.name, call.arguments)
@@ -471,6 +533,8 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
             })
             if call.name == "bash":
                 print(f"{tool_label('bash')}\n{indent_text(output)}")
+            elif call.name == "internet" and not debug:
+                print(f"{tool_label('internet')}\n{indent_text(output)}")
             elif call.name not in {"read", "write"} or debug:
                 print(f"{tool_label(call.name)}\n{indent_text(output)}")
 
@@ -505,7 +569,7 @@ def main() -> None:
         return
 
     trajectory_path = create_history_file()
-    print(f"History: {trajectory_path}")
+    print(f"Session: {trajectory_path}")
 
     system_prompt = load_system_prompt()
     messages: list[Message] = [{"role": "system", "content": system_prompt}]

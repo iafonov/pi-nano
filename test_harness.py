@@ -17,6 +17,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 
@@ -55,6 +56,7 @@ def run_agent(workdir: Path) -> str:
         "Edit hello_world.py. You must use the edit tool. Replace exactly hello world with hello worrrrlllldd.",
         "Run hello_world.py again. You must use the bash tool to run exactly: python3 hello_world.py",
         "Use the bash tool to run exactly: hostname. Then report the hostname output.",
+        "Fetch https://example.com using the internet tool. Then use bash to extract the page title from the saved file into internet_title.txt. Do not summarize the page.",
         "/exit",
     ]
     input_lines = [
@@ -66,6 +68,7 @@ def run_agent(workdir: Path) -> str:
         "",  # confirm python3 hello_world.py bash command
         prompt_lines[4],
         prompt_lines[5],
+        prompt_lines[6],
     ]
     prompts = "\n".join([*input_lines, ""])
 
@@ -128,10 +131,21 @@ def verify_history(workdir: Path) -> None:
     fail(f"history file has no llm_call events: {history_files[-1]}")
 
 
+def check_internet_prereq() -> None:
+    log("checking internet prerequisite with https://example.com")
+    try:
+        with urllib.request.urlopen("https://example.com", timeout=20) as response:
+            log(f"example.com reachable with status {response.status}")
+    except Exception as exc:
+        fail(f"internet prerequisite failed: {exc}")
+
+
 def main() -> None:
     log("starting live agent harness")
     if not AGENT.exists():
         fail(f"missing {AGENT}")
+
+    check_internet_prereq()
 
     with tempfile.TemporaryDirectory(prefix="agent_live_test_") as tmp:
         workdir = Path(tmp)
@@ -178,6 +192,17 @@ def main() -> None:
         assert_contains(output, "hello worrrrlllldd", "edited hello-world output")
         assert_contains(output, "[tool:bash] $ hostname", "hostname bash command")
         assert_contains(output, expected_hostname, "hostname output")
+        assert_contains(output, "[tool:internet] https://example.com", "internet tool call")
+        assert_contains(output, "Saved to: /tmp/pi_nano_example.com_", "internet saved-path output")
+
+        log("verifying internet_title.txt was created")
+        title_path = workdir / "internet_title.txt"
+        if not title_path.exists():
+            fail("internet_title.txt was not created", output)
+        title = title_path.read_text(encoding="utf-8").strip()
+        log(f"internet_title.txt content: {title!r}")
+        if "Example Domain" not in title:
+            fail("internet_title.txt does not contain Example Domain", output)
 
         verify_history(workdir)
 
