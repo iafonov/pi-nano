@@ -8,6 +8,7 @@ The whole agent lives in `agent.py`. It keeps a conversation history, sends it t
 
 - Local file tools: `read`, `write`, `edit`
 - Shell tool: `bash`
+- Internet tool: `internet` fetches URLs into `/tmp` and returns the saved path
 - Bash confirmation with a small read-only auto-allow list
 - `AGENTS.md` repo instructions injected into the system prompt
 - JSONL history logs in `history/session_<timestamp>.jsonl`
@@ -42,6 +43,7 @@ python3 agent.py --debug 1
 Useful commands inside the agent:
 
 - `/inspect` — print current message chain
+- `/rewind N` — rewind conversation state back to turn `N`
 - `/reset` — reset conversation and reload `AGENTS.md`
 - `/exit` — quit
 
@@ -51,4 +53,4 @@ Useful commands inside the agent:
 python3 test_harness.py
 ```
 
-The harness uses the live local Ollama server, creates a temporary workspace, asks the agent to create/edit/run a hello-world script, checks `bash`, and verifies history logging.
+The harness uses the live local Ollama server, creates a temporary workspace, asks the agent to create/edit/run a hello-world script, checks `bash`, tests `internet`, tests `/rewind`, and verifies history logging.
