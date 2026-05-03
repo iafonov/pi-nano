@@ -57,6 +57,8 @@ def run_agent(workdir: Path) -> str:
         "Run hello_world.py again. You must use the bash tool to run exactly: python3 hello_world.py",
         "Use the bash tool to run exactly: hostname. Then report the hostname output.",
         "Fetch https://example.com using the internet tool. Then use bash to extract the page title from the saved file into internet_title.txt. Do not summarize the page.",
+        "/rewind 3",
+        "Use the bash tool to run exactly: pwd",
         "/exit",
     ]
     input_lines = [
@@ -68,7 +70,14 @@ def run_agent(workdir: Path) -> str:
         "",  # confirm python3 hello_world.py bash command
         prompt_lines[4],
         prompt_lines[5],
+        "",  # approve possible extraction bash command
+        "",  # approve possible verification bash command
+        "",  # approve possible retry bash command
+        "",  # approve possible verification bash command
+        "",  # extra approval if the model retries
         prompt_lines[6],
+        prompt_lines[7],
+        prompt_lines[8],
     ]
     prompts = "\n".join([*input_lines, ""])
 
@@ -194,8 +203,10 @@ def main() -> None:
         assert_contains(output, expected_hostname, "hostname output")
         assert_contains(output, "[tool:internet] https://example.com", "internet tool call")
         assert_contains(output, "Saved to: /tmp/pi_nano_example.com_", "internet saved-path output")
+        assert_contains(output, "Rewound to turn 3.", "rewind confirmation")
+        assert_contains(output, "[tool:bash] $ pwd", "pwd bash command after rewind")
 
-        log("verifying internet_title.txt was created")
+        log("verifying internet_title.txt was created before rewind")
         title_path = workdir / "internet_title.txt"
         if not title_path.exists():
             fail("internet_title.txt was not created", output)

@@ -34,6 +34,9 @@ Available tools:
 - internet: fetch URL contents
 
 Guidelines:
+- Answer general/conceptual questions directly without using tools.
+- Do not create scripts, files, or examples on disk just to answer a question.
+- Use tools only for local files, shell commands, internet fetching, or when the user explicitly asks you to inspect/run/create/edit/fetch something.
 - Inspect files before editing them.
 - Prefer exact edits over rewriting whole files.
 - Keep answers concise.
@@ -44,6 +47,7 @@ Guidelines:
 - Do not say "I'll read/edit/run/fix" unless you call the appropriate tool in the same response.
 - Tool results are raw data for completing the user's task; do not summarize them unless asked.
 - After a tool result, continue the user's original task.
+- If a task would benefit from a missing tool, briefly suggest that tool to the user.
 """
 
 
@@ -443,6 +447,7 @@ def looks_like_pending_tool_action(text: str) -> bool:
 
 
 def format_llm_output(text: str) -> str:
+    text = re.sub(r"\*\*(.+?)\*\*", rf"{BOLD}\1{RESET}", text)
     parts = text.split("```")
     for index in range(1, len(parts), 2):
         parts[index] = f"{BOLD}{parts[index]}{RESET}"
@@ -573,10 +578,12 @@ def main() -> None:
 
     system_prompt = load_system_prompt()
     messages: list[Message] = [{"role": "system", "content": system_prompt}]
+    turn = 0
+    turn_snapshots: dict[int, int] = {0: len(messages)}
 
     while True:
         try:
-            text = input("> ").strip()
+            text = input(f"{turn} > ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -589,13 +596,34 @@ def main() -> None:
         if text == "/reset":
             system_prompt = load_system_prompt()
             messages = [{"role": "system", "content": system_prompt}]
+            turn = 0
+            turn_snapshots = {0: len(messages)}
             print("Conversation reset.")
+            continue
+        if text.startswith("/rewind "):
+            try:
+                target_turn = int(text.split(maxsplit=1)[1])
+            except ValueError:
+                print("Usage: /rewind <turn>")
+                continue
+            if target_turn not in turn_snapshots:
+                available = ", ".join(str(value) for value in sorted(turn_snapshots))
+                print(f"Unknown turn {target_turn}. Available turns: {available}")
+                continue
+            messages = messages[:turn_snapshots[target_turn]]
+            turn = target_turn
+            turn_snapshots = {
+                key: value for key, value in turn_snapshots.items() if key <= target_turn
+            }
+            print(f"Rewound to turn {turn}.")
             continue
         if not text:
             continue
 
         messages.append({"role": "user", "content": text})
         run_agent_turn(messages, trajectory_path, debug)
+        turn += 1
+        turn_snapshots[turn] = len(messages)
 
 
 if __name__ == "__main__":
