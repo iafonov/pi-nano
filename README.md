@@ -1,6 +1,6 @@
 # pi-nano
 
-A tiny Python coding-agent experiment powered by local Ollama and `qwen3-coder:latest`.
+A tiny Python coding-agent experiment powered by local Ollama.
 
 The whole agent lives in `agent.py`. It keeps a conversation history, sends it to Ollama, executes local tools requested by the model, and feeds tool results back into the next LLM call.
 
