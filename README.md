@@ -6,9 +6,7 @@ The whole agent lives in `agent.py`. It keeps a conversation history, sends it t
 
 ## Features
 
-- Local file tools: `read`, `write`, `edit`
-- Shell tool: `bash`
-- Internet tool: `internet` fetches URLs into `/tmp` and returns the saved path
+- Tools: `read`, `write`, `edit`, `bash`, `internet`
 - Bash confirmation with a small read-only auto-allow list
 - `AGENTS.md` repo instructions injected into the system prompt
 - JSONL history logs in `history/session_<timestamp>.jsonl`
