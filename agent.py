@@ -458,7 +458,9 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                 "name": call.name,
                 "content": output,
             })
-            if call.name not in {"read", "write"} or debug:
+            if call.name == "bash":
+                print(f"{PUNK}[tool:bash]{RESET} {output}")
+            elif call.name not in {"read", "write"} or debug:
                 print(f"{PUNK}[tool:{call.name}]{RESET}{GRAY} {output}{RESET}")
 
 
