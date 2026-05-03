@@ -59,6 +59,9 @@ Message = dict[str, Any]
 
 GRAY = "\033[2;90m"
 PUNK = "\033[1;35m"
+TOOL = "\033[1;97;45m"
+RED = "\033[1;31m"
+GREEN = "\033[1;32m"
 RESET = "\033[0m"
 
 TOOL_SCHEMAS = [
@@ -187,8 +190,8 @@ def edit_tool(path: str, old_text: str, new_text: str) -> str:
     file_path.write_text(text.replace(old_text, new_text, 1), encoding="utf-8")
     return (
         f"Edited {path}\n"
-        f"Replaced:\n--- old\n{preview_text(old_text)}\n"
-        f"+++ new\n{preview_text(new_text)}"
+        f"Replaced:\n{RED}--- old{RESET}\n{preview_text(old_text)}\n"
+        f"{GREEN}+++ new{RESET}\n{preview_text(new_text)}"
     )
 
 
@@ -386,6 +389,14 @@ def looks_like_pending_tool_action(text: str) -> bool:
     return any(phrase in lowered for phrase in action_phrases)
 
 
+def tool_label(name: str) -> str:
+    return f"{TOOL}[tool:{name}]{RESET}"
+
+
+def indent_text(text: str, prefix: str = "  ") -> str:
+    return "\n".join(prefix + line if line else prefix for line in text.splitlines())
+
+
 def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) -> None:
     nudge_used = False
 
@@ -420,7 +431,7 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
         for call in response.tool_calls:
             if call.name == "bash":
                 command = call.arguments.get("command", "")
-                print(f"{PUNK}[tool:bash]{RESET} $ {command}")
+                print(f"{tool_label('bash')} $ {command}")
                 if not should_auto_accept_bash(command):
                     try:
                         input("Press Enter to run, or Ctrl+C to cancel...")
@@ -434,24 +445,24 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                         return
             elif call.name == "edit":
                 print(
-                    f"{PUNK}[tool:edit]{RESET}{GRAY} {call.arguments.get('path', '')}\n"
-                    f"--- old\n{preview_text(call.arguments.get('old_text', ''))}\n"
-                    f"+++ new\n{preview_text(call.arguments.get('new_text', ''))}{RESET}"
+                    f"{tool_label('edit')} {call.arguments.get('path', '')}\n"
+                    f"  {RED}--- old{RESET}\n{indent_text(preview_text(call.arguments.get('old_text', '')))}\n"
+                    f"  {GREEN}+++ new{RESET}\n{indent_text(preview_text(call.arguments.get('new_text', '')))}"
                 )
             elif call.name == "read":
                 path = Path(call.arguments.get("path", ""))
                 size = path.stat().st_size if path.exists() else 0
                 tokens = int(size / 3.5)
-                print(f"{PUNK}[tool:read]{RESET} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
+                print(f"{tool_label('read')} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
             elif call.name == "write":
                 path = Path(call.arguments.get("path", ""))
                 content = call.arguments.get("content", "")
                 size = len(content.encode("utf-8"))
                 tokens = int(size / 3.5)
-                print(f"{PUNK}[tool:write]{RESET} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
-                print(f"{GRAY}{content}{RESET}")
+                print(f"{tool_label('write')} {path.resolve()} ({size} bytes, ~{tokens} tokens)")
+                print(indent_text(content))
             else:
-                print(f"{PUNK}[tool:{call.name}]{RESET}{GRAY} {json.dumps(call.arguments)}{RESET}")
+                print(f"{tool_label(call.name)} {json.dumps(call.arguments)}")
             output = run_tool(call.name, call.arguments)
             messages.append({
                 "role": "tool",
@@ -459,9 +470,9 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
                 "content": output,
             })
             if call.name == "bash":
-                print(f"{PUNK}[tool:bash]{RESET} {output}")
+                print(f"{tool_label('bash')}\n{indent_text(output)}")
             elif call.name not in {"read", "write"} or debug:
-                print(f"{PUNK}[tool:{call.name}]{RESET}{GRAY} {output}{RESET}")
+                print(f"{tool_label(call.name)}\n{indent_text(output)}")
 
 
 def main() -> None:
