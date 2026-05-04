@@ -4,6 +4,8 @@ A tiny Python coding-agent experiment powered by local Ollama.
 
 The whole agent lives in `agent.py`. It keeps a conversation history, sends it to Ollama, executes local tools requested by the model, and feeds tool results back into the next LLM call.
 
+<img width="502" height="370" alt="Agent" src="https://github.com/user-attachments/assets/75e3351d-1b24-4fff-879a-7448701c1732" />
+
 ## Features
 
 - Tools: `read`, `write`, `edit`, `bash`, `internet`
