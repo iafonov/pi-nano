@@ -335,9 +335,7 @@ def run_tool(name: str, arguments: dict[str, Any]) -> str:
 def parse_text_tool_calls(content: str) -> tuple[str, list[ToolCall]]:
     """Parse Qwen-style textual tool calls if Ollama did not return structured ones."""
     tool_calls: list[ToolCall] = []
-    pattern = re.compile(
-        r"<function=([a-zA-Z_][\w-]*)>(.*?)</function>", re.DOTALL
-    )
+    pattern = re.compile(r"<function=([a-zA-Z_][\w-]*)>(.*?)</function>", re.DOTALL)
     param_pattern = re.compile(
         r"<parameter=([a-zA-Z_][\w-]*)>\s*(.*?)\s*</parameter>",
         re.DOTALL,
@@ -441,9 +439,7 @@ def call_llm(
         arguments = function.get("arguments", {})
         if isinstance(arguments, str):
             arguments = json.loads(arguments or "{}")
-        tool_calls.append(
-            ToolCall(name=function.get("name", ""), arguments=arguments)
-        )
+        tool_calls.append(ToolCall(name=function.get("name", ""), arguments=arguments))
 
     if not tool_calls:
         content, tool_calls = parse_text_tool_calls(content)
@@ -496,14 +492,10 @@ def tool_label(name: str) -> str:
 
 
 def indent_text(text: str, prefix: str = "  ") -> str:
-    return "\n".join(
-        prefix + line if line else prefix for line in text.splitlines()
-    )
+    return "\n".join(prefix + line if line else prefix for line in text.splitlines())
 
 
-def run_agent_turn(
-    messages: list[Message], trajectory_path: Path, debug: bool
-) -> None:
+def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) -> None:
     nudge_used = False
 
     while True:
@@ -587,9 +579,7 @@ def run_agent_turn(
                 )
                 print(indent_text(content))
             elif call.name == "internet":
-                print(
-                    f"{tool_label('internet')} {call.arguments.get('url', '')}"
-                )
+                print(f"{tool_label('internet')} {call.arguments.get('url', '')}")
             else:
                 print(f"{tool_label(call.name)} {json.dumps(call.arguments)}")
             output = run_tool(call.name, call.arguments)
@@ -678,12 +668,8 @@ def main() -> None:
                 print("Usage: /rewind <turn>")
                 continue
             if target_turn not in turn_snapshots:
-                available = ", ".join(
-                    str(value) for value in sorted(turn_snapshots)
-                )
-                print(
-                    f"Unknown turn {target_turn}. Available turns: {available}"
-                )
+                available = ", ".join(str(value) for value in sorted(turn_snapshots))
+                print(f"Unknown turn {target_turn}. Available turns: {available}")
                 continue
             messages = messages[: turn_snapshots[target_turn]]
             turn = target_turn
