@@ -370,11 +370,6 @@ def call_llm(
     messages: list[Message], trajectory_path: Path, debug: bool
 ) -> LLMResponse:
     """Call Ollama's local OpenAI-compatible chat completions API."""
-    if debug:
-        print(f"{GRAY}--- LLM input ---")
-        print(json.dumps(messages, indent=2))
-        print(f"--- end LLM input ---{RESET}")
-
     payload = {
         "model": "qwen3-coder:latest",
         "messages": [
@@ -687,6 +682,10 @@ def main() -> None:
         run_agent_turn(messages, trajectory_path, debug)
         turn += 1
         turn_snapshots[turn] = len(messages)
+        if debug:
+            print(f"{GRAY}--- conversation history after turn {turn} ---")
+            print(json.dumps(messages, indent=2))
+            print(f"--- end conversation history ---{RESET}")
 
 
 if __name__ == "__main__":
