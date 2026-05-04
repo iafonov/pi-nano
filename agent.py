@@ -357,17 +357,21 @@ def parse_text_tool_calls(content: str) -> tuple[str, list[ToolCall]]:
     return cleaned, tool_calls
 
 
-def ollama_message(message: Message) -> Message:
+def openai_message(message: Message) -> Message:
     formatted = {"role": message["role"], "content": message.get("content", "")}
     if message.get("tool_calls"):
         formatted["tool_calls"] = message["tool_calls"]
+    if message.get("tool_call_id"):
+        formatted["tool_call_id"] = message["tool_call_id"]
+    if message.get("name") and message.get("role") == "tool":
+        formatted["name"] = message["name"]
     return formatted
 
 
 def call_llm(
     messages: list[Message], trajectory_path: Path, debug: bool
 ) -> LLMResponse:
-    """Call the local Ollama chat API."""
+    """Call Ollama's local OpenAI-compatible chat completions API."""
     if debug:
         print(f"{GRAY}--- LLM input ---")
         print(json.dumps(messages, indent=2))
@@ -376,7 +380,7 @@ def call_llm(
     payload = {
         "model": "qwen3-coder:latest",
         "messages": [
-            ollama_message(message)
+            openai_message(message)
             for message in messages
             if message.get("role") in {"system", "user", "assistant", "tool"}
         ],
@@ -385,9 +389,12 @@ def call_llm(
     }
 
     request = urllib.request.Request(
-        "http://localhost:11434/api/chat",
+        "http://localhost:11434/v1/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer ollama",
+        },
         method="POST",
     )
 
@@ -424,15 +431,16 @@ def call_llm(
         },
     )
 
-    message = data.get("message", {})
-    content = message.get("content", "")
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message", {})
+    content = message.get("content", "") or ""
     tool_calls = []
 
     for call in message.get("tool_calls", []) or []:
         function = call.get("function", {})
         arguments = function.get("arguments", {})
         if isinstance(arguments, str):
-            arguments = json.loads(arguments)
+            arguments = json.loads(arguments or "{}")
         tool_calls.append(
             ToolCall(name=function.get("name", ""), arguments=arguments)
         )
@@ -506,8 +514,15 @@ def run_agent_turn(
         }
         if response.tool_calls:
             assistant_message["tool_calls"] = [
-                {"function": {"name": call.name, "arguments": call.arguments}}
-                for call in response.tool_calls
+                {
+                    "id": f"call_{index}",
+                    "type": "function",
+                    "function": {
+                        "name": call.name,
+                        "arguments": json.dumps(call.arguments),
+                    },
+                }
+                for index, call in enumerate(response.tool_calls)
             ]
         messages.append(assistant_message)
 
@@ -531,7 +546,7 @@ def run_agent_turn(
 
         nudge_used = False
 
-        for call in response.tool_calls:
+        for call_index, call in enumerate(response.tool_calls):
             if call.name == "bash":
                 command = call.arguments.get("command", "")
                 print(f"{tool_label('bash')} $ {command}")
@@ -543,6 +558,7 @@ def run_agent_turn(
                         messages.append(
                             {
                                 "role": "tool",
+                                "tool_call_id": f"call_{call_index}",
                                 "name": call.name,
                                 "content": "Tool cancelled by user.",
                             }
@@ -580,6 +596,7 @@ def run_agent_turn(
             messages.append(
                 {
                     "role": "tool",
+                    "tool_call_id": f"call_{call_index}",
                     "name": call.name,
                     "content": output,
                 }
