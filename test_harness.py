@@ -58,6 +58,7 @@ def run_agent(workdir: Path) -> str:
         "Fetch https://example.com using the internet tool. Then use bash to extract the page title from the saved file into internet_title.txt. Do not summarize the page.",
         "/rewind 3",
         "Use the bash tool to run exactly: pwd",
+        "Use the read tool to read lines 1 through 5 of agent.py. Use offset 1 and limit 5.",
         "/exit",
     ]
     input_lines = [
@@ -77,6 +78,7 @@ def run_agent(workdir: Path) -> str:
         prompt_lines[6],
         prompt_lines[7],
         prompt_lines[8],
+        prompt_lines[9],
     ]
     prompts = "\n".join([*input_lines, ""])
 
@@ -210,6 +212,8 @@ def main() -> None:
         )
         assert_contains(output, "Rewound to turn 3.", "rewind confirmation")
         assert_contains(output, "[tool:bash] $ pwd", "pwd bash command after rewind")
+        assert_contains(output, "[tool:read]", "range read tool call")
+        assert_contains(output, "lines 1+5", "range read display")
 
         log("verifying internet_title.txt was created before rewind")
         title_path = workdir / "internet_title.txt"
