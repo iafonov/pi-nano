@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import threading
@@ -56,6 +57,14 @@ Guidelines:
 - If the file is large, give a structured high-level summary instead of reproducing code.
 - If a task would benefit from a missing tool, briefly suggest that tool to the user.
 """
+
+
+@dataclass
+class ProviderConfig:
+    provider: str
+    base_url: str
+    model: str
+    api_key: str
 
 
 @dataclass
@@ -159,6 +168,37 @@ TOOL_SCHEMAS = [
         },
     },
 ]
+
+
+def load_dotenv(path: str = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def load_provider_config() -> ProviderConfig:
+    provider = os.environ.get("PROVIDER", "ollama").lower()
+    if provider == "openrouter":
+        return ProviderConfig(
+            provider="openrouter",
+            base_url="https://openrouter.ai/api/v1",
+            model=os.environ.get("OPENROUTER_MODEL", "qwen/qwen3-coder"),
+            api_key=os.environ.get("OPENROUTER_API_KEY", ""),
+        )
+
+    return ProviderConfig(
+        provider="ollama",
+        base_url="http://localhost:11434/v1",
+        model="qwen3-coder:latest",
+        api_key="ollama",
+    )
 
 
 def load_system_prompt() -> str:
@@ -390,11 +430,11 @@ def openai_message(message: Message) -> Message:
 
 
 def call_llm(
-    messages: list[Message], trajectory_path: Path, debug: bool
+    messages: list[Message], trajectory_path: Path, debug: bool, config: ProviderConfig
 ) -> LLMResponse:
     """Call Ollama's local OpenAI-compatible chat completions API."""
     payload = {
-        "model": "qwen3-coder:latest",
+        "model": config.model,
         "messages": [
             openai_message(message)
             for message in messages
@@ -405,11 +445,11 @@ def call_llm(
     }
 
     request = urllib.request.Request(
-        "http://localhost:11434/v1/chat/completions",
+        f"{config.base_url.rstrip('/')}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer ollama",
+            "Authorization": f"Bearer {config.api_key}",
         },
         method="POST",
     )
@@ -513,11 +553,13 @@ def indent_text(text: str, prefix: str = "  ") -> str:
     return "\n".join(prefix + line if line else prefix for line in text.splitlines())
 
 
-def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) -> None:
+def run_agent_turn(
+    messages: list[Message], trajectory_path: Path, debug: bool, config: ProviderConfig
+) -> None:
     nudge_used = False
 
     while True:
-        response = call_llm(messages, trajectory_path, debug)
+        response = call_llm(messages, trajectory_path, debug, config)
         assistant_message: Message = {
             "role": "assistant",
             "content": response.text,
@@ -624,6 +666,9 @@ def run_agent_turn(messages: list[Message], trajectory_path: Path, debug: bool) 
 
 
 def main() -> None:
+    load_dotenv()
+    config = load_provider_config()
+
     parser = argparse.ArgumentParser(description="Tiny local coding agent")
     parser.add_argument(
         "--debug",
@@ -634,29 +679,24 @@ def main() -> None:
     args = parser.parse_args()
     debug = bool(args.debug)
 
-    # Check that Ollama is running
-    try:
-        import urllib.request
-        import json
-
-        request = urllib.request.Request(
-            "http://localhost:11434/api/tags",
-            method="GET",
-        )
-        with urllib.request.urlopen(request, timeout=10) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            model_name = "qwen3-coder:latest"  # Default model name
-            if "models" in data:
-                # Find the model we're using
-                for model in data["models"]:
-                    if model["name"] == "qwen3-coder:latest":
-                        model_name = model["name"]
-                        break
-            print(f"Local Ollama API live and serving model: {model_name}")
-    except Exception as exc:
-        print(f"Warning: Could not connect to Ollama API: {exc}")
-        print("Make sure Ollama is running with 'ollama serve'")
-        return
+    if config.provider == "ollama":
+        try:
+            request = urllib.request.Request(
+                "http://localhost:11434/api/tags",
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=10):
+                pass
+            print(f"Using ollama model: {config.model}")
+        except Exception as exc:
+            print(f"Warning: Could not connect to Ollama API: {exc}")
+            print("Make sure Ollama is running with 'ollama serve'")
+            return
+    else:
+        if not config.api_key:
+            print("OPENROUTER_API_KEY is required when PROVIDER=openrouter")
+            return
+        print(f"Using openrouter model: {config.model}")
 
     trajectory_path = create_history_file()
     print(f"Session: {trajectory_path}")
@@ -708,7 +748,7 @@ def main() -> None:
             continue
 
         messages.append({"role": "user", "content": text})
-        run_agent_turn(messages, trajectory_path, debug)
+        run_agent_turn(messages, trajectory_path, debug, config)
         turn += 1
         turn_snapshots[turn] = len(messages)
         if debug:
