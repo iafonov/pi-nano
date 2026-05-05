@@ -165,6 +165,10 @@ def main() -> None:
         if AGENTS.exists():
             shutil.copy2(AGENTS, workdir / "AGENTS.md")
             log("copied AGENTS.md")
+        env_path = ROOT / ".env"
+        if env_path.exists():
+            shutil.copy2(env_path, workdir / ".env")
+            log("copied live .env")
 
         output = run_agent(workdir)
 

@@ -201,13 +201,21 @@ def load_provider_config() -> ProviderConfig:
     )
 
 
-def load_system_prompt() -> str:
-    agents_path = Path("AGENTS.md")
-    if not agents_path.exists():
-        return BASE_SYSTEM_PROMPT
+def load_system_prompt(bootstrap: bool = False) -> str:
+    prompt = BASE_SYSTEM_PROMPT
 
-    agents_text = agents_path.read_text(encoding="utf-8")
-    return f"{BASE_SYSTEM_PROMPT}\n\nRepo instructions from AGENTS.md:\n{agents_text}"
+    agents_path = Path("AGENTS.md")
+    if agents_path.exists():
+        agents_text = agents_path.read_text(encoding="utf-8")
+        prompt += f"\n\nRepo instructions from AGENTS.md:\n{agents_text}"
+
+    if bootstrap:
+        bootstrap_path = Path("BOOTSTRAP.md")
+        if bootstrap_path.exists():
+            bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
+            prompt += f"\n\nBootstrap instructions from BOOTSTRAP.md:\n{bootstrap_text}"
+
+    return prompt
 
 
 def create_history_file() -> Path:
@@ -676,8 +684,15 @@ def main() -> None:
         default=0,
         help="Show full LLM inputs when set to 1",
     )
+    parser.add_argument(
+        "--bootstrap",
+        action="store_true",
+        default=False,
+        help="Load BOOTSTRAP_AGENTS.md instead of AGENTS.md (for self-modification)",
+    )
     args = parser.parse_args()
     debug = bool(args.debug)
+    bootstrap = args.bootstrap
 
     if config.provider == "ollama":
         try:
@@ -700,8 +715,10 @@ def main() -> None:
 
     trajectory_path = create_history_file()
     print(f"Session: {trajectory_path}")
+    if bootstrap:
+        print(f"{PUNK}[bootstrap mode]{RESET}")
 
-    system_prompt = load_system_prompt()
+    system_prompt = load_system_prompt(bootstrap)
     messages: list[Message] = [{"role": "system", "content": system_prompt}]
     turn = 0
     turn_snapshots: dict[int, int] = {0: len(messages)}
@@ -719,7 +736,7 @@ def main() -> None:
             print(json.dumps(messages, indent=2))
             continue
         if text == "/reset":
-            system_prompt = load_system_prompt()
+            system_prompt = load_system_prompt(bootstrap)
             messages = [{"role": "system", "content": system_prompt}]
             turn = 0
             turn_snapshots = {0: len(messages)}
