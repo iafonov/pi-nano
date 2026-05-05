@@ -1,8 +1,8 @@
 # pi-nano
 
-A tiny Python coding-agent experiment powered by local Ollama.
+A tiny Python coding-agent experiment powered by local Ollama, with an easy switch to OpenRouter.
 
-The whole agent lives in `agent.py`. It keeps a conversation history, sends it to Ollama, executes local tools requested by the model, and feeds tool results back into the next LLM call.
+The whole agent lives in `agent.py`. It keeps a conversation history, sends it to an OpenAI-compatible chat API, executes local tools requested by the model, and feeds tool results back into the next LLM call.
 
 <img width="502" height="370" alt="Agent" src="https://github.com/user-attachments/assets/75e3351d-1b24-4fff-879a-7448701c1732" />
 
@@ -34,7 +34,15 @@ Run the agent:
 python3 agent.py
 ```
 
-Debug mode prints full LLM inputs:
+To use OpenRouter instead, copy `.env.example` to `.env` and set:
+
+```env
+PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=qwen/qwen3-coder
+```
+
+Debug mode prints conversation history after each turn:
 
 ```bash
 python3 agent.py --debug 1
