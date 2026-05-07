@@ -300,46 +300,48 @@ def edit_tool(path: str, old_text: str, new_text: str) -> str:
     )
 
 
-READ_ONLY_BASH_PREFIXES = (
-    "ls",
-    "pwd",
-    "cat",
-    "head",
-    "tail",
-    "grep",
-    "rg",
-    "find",
-    "wc",
-    "du",
-    "df",
-    "file",
-    "stat",
-    "git status",
-    "git diff",
-    "git log",
-    "python3 -m py_compile",
-    "hostname",
-    "whoami",
-    "date",
-    "uname",
-    "sysctl",
-    "vm_stat",
-    "ps",
-    "which",
+BLOCKED_BASH_PATTERNS = (
+    "rm ",
+    "rm -r",
+    "rm -rf",
+    "rmdir ",
+    "mv ",
+    "sudo ",
+    "chmod -R",
+    "chmod 777",
+    "chown ",
+    "chown -R",
+    "dd ",
+    "mkfs",
+    "fdisk",
+    "diskutil erase",
+    "git reset --hard",
+    "git clean -fd",
+    "git push --force",
+    "pip uninstall",
+    "brew uninstall",
+    "apt-get remove",
+    "apt remove",
+    "yum remove",
+    "npm uninstall",
+    "crontab ",
+    "systemctl disable",
 )
+
+
+def is_blocked_bash(command: str) -> bool:
+    stripped = command.strip()
+    return any(
+        stripped == pattern.strip() or stripped.startswith(pattern)
+        for pattern in BLOCKED_BASH_PATTERNS
+    )
 
 
 def should_auto_accept_bash(command: str) -> bool:
     stripped = command.strip()
     if not stripped:
         return False
-    dangerous_tokens = (";", "&&", "||", "|", ">", "<", "`", "$(")
-    if any(token in stripped for token in dangerous_tokens):
-        return False
-    return any(
-        stripped == prefix or stripped.startswith(prefix + " ")
-        for prefix in READ_ONLY_BASH_PREFIXES
-    )
+    return not is_blocked_bash(stripped)
 
 
 def internet_tool(url: str) -> str:
